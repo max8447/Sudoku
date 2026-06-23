@@ -54,7 +54,20 @@ void Sudoku::Import(const char* CellsStr)
 	{
 		for (int Row = 0; Row < 9; Row++)
 		{
-			Cells[Row][Column] = CellsStr[Idx++] - '0';
+			int Cell = Helper::RowColumnToCell({ Row, Column });
+			int CellValue = CellsStr[Idx++] - '0';
+
+			if (CellValue == ('.' - '0')) // allow dots as zeroes
+			{
+				CellValue = 0;
+			}
+
+			Cells[Row][Column] = CellValue;
+
+			if (CellValue != 0)
+			{
+				PrefilledCells[Cell] = true;
+			}
 		}
 	}
 }
@@ -255,21 +268,77 @@ void Sudoku::UpdateIncorrectCells()
 
 void Sudoku::SolveStep(int Cell)
 {
-	const auto [Row, Column] = Helper::CellToRowColumn(Cell);
-
-	int CellValue = Cells[Row][Column];
-
-	if (CellValue == 0 || IncorrectCells[Cell])
+	if (PrefilledCells[Cell])
 	{
-		for (int i = 1; i <= 9; i++)
-		{
-			Cells[Row][Column] = i;
-			UpdateIncorrectCells();
+		return;
+	}
 
-			if (!IncorrectCells[Cell])
+	if (CountFilledCells() < 81)
+	{
+		const auto [Row, Column] = Helper::CellToRowColumn(Cell);
+
+		int CellValue = Cells[Row][Column];
+
+		if (CellValue == 0 || IncorrectCells[Cell])
+		{
+			for (int i = 1; i <= 9; i++)
 			{
-				break;
+				Cells[Row][Column] = i;
+				UpdateIncorrectCells();
+
+				if (!IncorrectCells[Cell])
+				{
+					break;
+				}
 			}
+		}
+	}
+	else
+	{
+		// shuffle the incorrect squares
+
+		int NumIncorrectCellsBefore = CountIncorrectCells();
+		int NumUnfilledCellsBefore = 81 - CountFilledCells();
+		int NumUnfinishedCellsBefore = NumIncorrectCellsBefore + NumUnfilledCellsBefore;
+
+		if (NumUnfinishedCellsBefore > 0)
+		{
+			int IncorrectCell = -1;
+
+			for (int CurrentCell = 0; CurrentCell < 81; CurrentCell++)
+			{
+				if (IncorrectCells[CurrentCell])
+				{
+					IncorrectCell = CurrentCell;
+					break;
+				}
+			}
+
+			if (IncorrectCell == -1)
+			{
+				return;
+			}
+
+			const auto [Row, Column] = Helper::CellToRowColumn(IncorrectCell);
+
+			int LeastConflicts = INT32_MAX;
+			int LeastConflictingValue = 0;
+
+			for (int i = 1; i <= 9; i++)
+			{
+				Cells[Row][Column] = i;
+				UpdateIncorrectCells();
+
+				int Conflicts = CountIncorrectCells();
+
+				if (Conflicts < LeastConflicts)
+				{
+					LeastConflicts = Conflicts;
+					LeastConflictingValue = i;
+				}
+			}
+
+			Cells[Row][Column] = LeastConflictingValue;
 		}
 	}
 }
@@ -313,32 +382,44 @@ void Sudoku::HandleInput()
 			const auto [Row, Column] = Helper::CellToRowColumn(SelectedCell);
 			const int CurrentCellValue = Cells[Row][Column];
 
-			for (int i = 1; i <= 9; i++)
+			if (!PrefilledCells[SelectedCell])
 			{
-				if (ImGui::Shortcut(ImGuiKey_0 + i))
+				for (int i = 1; i <= 9; i++)
 				{
-					if (CurrentCellValue != i)
+					if (ImGui::Shortcut(ImGuiKey_0 + i))
 					{
-						Cells[Row][Column] = i;
-						UpdateIncorrectCells();
+						if (CurrentCellValue != i)
+						{
+							Cells[Row][Column] = i;
+							UpdateIncorrectCells();
+						}
 					}
 				}
-			}
 
-			if (CurrentCellValue != 0)
-			{
-				if (ImGui::Shortcut(ImGuiKey_Backspace) || ImGui::Shortcut(ImGuiKey_Delete))
+				if (CurrentCellValue != 0)
 				{
-					Cells[Row][Column] = 0;
-					UpdateIncorrectCells();
+					if (ImGui::Shortcut(ImGuiKey_Backspace) || ImGui::Shortcut(ImGuiKey_Delete))
+					{
+						Cells[Row][Column] = 0;
+						UpdateIncorrectCells();
+					}
 				}
 			}
 		}
 
 		if (ImGui::IsKeyDown(ImGuiKey_Enter))
 		{
+			if (SelectedCell == -1)
+			{
+				SelectedCell = 0;
+			}
+
+			if (!PrefilledCells[SelectedCell])
+			{
+				SolveStep(SelectedCell);
+			}
+
 			SelectedCell = (SelectedCell + 1) % 81;
-			SolveStep(SelectedCell);
 		}
 	}
 
@@ -346,6 +427,42 @@ void Sudoku::HandleInput()
 	{
 		printf("%s\n", Export());
 	}
+}
+
+int Sudoku::CountFilledCells() const
+{
+	int Result = 0;
+
+	IterateCells([this, &Result](const ImVec2& CellMin, const ImVec2& CellMax, int Row, int Column) -> bool
+		{
+			if (Cells[Row][Column] != 0)
+			{
+				Result++;
+			}
+
+			return true;
+		});
+
+	return Result;
+}
+
+int Sudoku::CountIncorrectCells() const
+{
+	int Result = 0;
+
+	IterateCells([this, &Result](const ImVec2& CellMin, const ImVec2& CellMax, int Row, int Column) -> bool
+		{
+			int Cell = Helper::RowColumnToCell({ Row, Column });
+			
+			if (IncorrectCells[Cell])
+			{
+				Result++;
+			}
+
+			return true;
+		});
+
+	return Result;
 }
 
 const ImVec2 Sudoku::GetCellSize() const
@@ -426,7 +543,7 @@ void Sudoku::DrawCandiates(int Cell) const
 
 void Sudoku::DrawCellValue(int CellValue, const ImVec2& CellMin, const ImVec2& CellMax) const
 {
-	if (CellValue <= 0)
+	if (CellValue == 0)
 	{
 		return;
 	}
@@ -497,7 +614,7 @@ void Sudoku::DrawCells() const
 
 			int CellValue = Cells[Row][Column];
 
-			if (CellValue <= 0)
+			if (CellValue == 0)
 			{
 				int Cell = Helper::RowColumnToCell({ Row, Column });
 				DrawCandiates(Cell);

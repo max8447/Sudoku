@@ -40,6 +40,9 @@ private:
 	void SelectCell();
 	void HandleInput();
 
+	int CountFilledCells() const;
+	int CountIncorrectCells() const;
+
 	const ImVec2 GetCellSize() const;
 
 	std::pair<ImVec2, ImVec2> GetCell(std::pair<int, int> RowColumn) const;

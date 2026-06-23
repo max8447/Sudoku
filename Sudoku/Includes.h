@@ -19,6 +19,7 @@ inline bool operator>=(const ImVec2& other) const { return x >= other.x && y >= 
 // std
 #include <memory>
 #include <functional>
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 

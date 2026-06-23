@@ -102,7 +102,7 @@ void Gui::InitializeGui()
 	ImGui_ImplOpenGL3_Init();
 
 	SudokuInstance = std::make_unique<Sudoku>();
-	SudokuInstance->Import("268371495159684372374295861841569723796832514523417986487123659615948237932756148");
+	SudokuInstance->Import("7.....1.....7...2.....19..5..84..6.....8.5..251.27.4......27.41...1...6......897.");
 }
 
 void Gui::ShutdownGui()
